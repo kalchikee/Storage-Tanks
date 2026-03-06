@@ -7,6 +7,7 @@ output/maps/
 output/reports/
 output/geojson/
 web/data/
+# docs/data/ is intentionally NOT ignored so pipeline outputs can be served via GitHub Pages
 
 # Python
 __pycache__/

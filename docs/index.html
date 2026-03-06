@@ -1,0 +1,798 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Ghost Infrastructure — Leaking UST Contamination Risk · Harris County, TX</title>
+
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <!-- Leaflet.markercluster -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
+
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: #0d1117;
+      color: #e6edf3;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── Header ── */
+    header {
+      background: linear-gradient(135deg, #161b22 0%, #1c2128 100%);
+      border-bottom: 1px solid #30363d;
+      padding: 10px 20px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      flex-shrink: 0;
+      z-index: 1000;
+    }
+    header .logo {
+      width: 36px; height: 36px;
+      background: linear-gradient(135deg, #d73027, #f46d43);
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px; flex-shrink: 0;
+    }
+    header h1 {
+      font-size: 16px; font-weight: 700; color: #f0f6fc;
+      line-height: 1.2;
+    }
+    header p { font-size: 11px; color: #8b949e; }
+    header .stats {
+      margin-left: auto;
+      display: flex; gap: 20px;
+    }
+    .stat-pill {
+      background: #21262d;
+      border: 1px solid #30363d;
+      border-radius: 20px;
+      padding: 4px 14px;
+      font-size: 11px;
+      color: #8b949e;
+      white-space: nowrap;
+    }
+    .stat-pill span { color: #58a6ff; font-weight: 700; }
+
+    /* ── Main Layout ── */
+    .main { display: flex; flex: 1; overflow: hidden; }
+
+    /* ── Sidebar ── */
+    .sidebar {
+      width: 320px;
+      background: #161b22;
+      border-right: 1px solid #30363d;
+      overflow-y: auto;
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+    }
+    .sidebar-section {
+      padding: 14px 16px;
+      border-bottom: 1px solid #21262d;
+    }
+    .sidebar-section h3 {
+      font-size: 11px; font-weight: 600;
+      text-transform: uppercase; letter-spacing: 0.08em;
+      color: #58a6ff; margin-bottom: 10px;
+    }
+
+    /* Layer toggles */
+    .layer-toggle {
+      display: flex; align-items: center; gap: 10px;
+      margin-bottom: 8px; cursor: pointer;
+    }
+    .layer-toggle input { accent-color: #58a6ff; width: 15px; height: 15px; }
+    .layer-toggle label {
+      font-size: 12px; color: #c9d1d9; cursor: pointer;
+      display: flex; align-items: center; gap: 6px;
+    }
+    .dot {
+      width: 10px; height: 10px; border-radius: 50%;
+      display: inline-block; flex-shrink: 0;
+    }
+
+    /* Legend */
+    .legend-item {
+      display: flex; align-items: center; gap: 8px;
+      margin-bottom: 6px; font-size: 11px; color: #8b949e;
+    }
+    .legend-color {
+      width: 16px; height: 16px; border-radius: 3px; flex-shrink: 0;
+    }
+
+    /* Vuln summary */
+    .vuln-bar {
+      display: flex; height: 20px; border-radius: 4px;
+      overflow: hidden; margin-bottom: 8px;
+    }
+    .vuln-segment { display: flex; align-items: center; justify-content: center;
+      font-size: 9px; font-weight: 700; color: #fff; transition: width 0.3s; }
+
+    /* Priority list */
+    .priority-item {
+      background: #21262d;
+      border: 1px solid #30363d;
+      border-radius: 6px;
+      padding: 8px 10px;
+      margin-bottom: 6px;
+      cursor: pointer;
+      transition: border-color 0.15s, background 0.15s;
+    }
+    .priority-item:hover { border-color: #58a6ff; background: #1c2128; }
+    .priority-item .rank {
+      font-size: 10px; color: #f0883e; font-weight: 700;
+    }
+    .priority-item .name { font-size: 12px; color: #e6edf3; font-weight: 600; }
+    .priority-item .detail { font-size: 10px; color: #8b949e; margin-top: 2px; }
+    .threat-bar {
+      height: 3px; background: #30363d; border-radius: 2px;
+      margin-top: 5px; overflow: hidden;
+    }
+    .threat-fill { height: 100%; border-radius: 2px;
+      background: linear-gradient(90deg, #f0883e, #d73027); }
+
+    /* Info panel */
+    #info-panel {
+      background: #161b22;
+      border-top: 1px solid #30363d;
+      padding: 12px 16px;
+      font-size: 11px;
+      color: #8b949e;
+      min-height: 60px;
+      flex-shrink: 0;
+    }
+    #info-panel h4 { color: #c9d1d9; margin-bottom: 4px; font-size: 12px; }
+    #info-panel table { width: 100%; border-collapse: collapse; }
+    #info-panel td { padding: 1px 0; }
+    #info-panel td:first-child { color: #8b949e; padding-right: 8px; width: 40%; }
+    #info-panel td:last-child { color: #e6edf3; font-weight: 500; }
+
+    /* ── Map ── */
+    #map { flex: 1; }
+
+    /* Search */
+    .search-box {
+      position: absolute; top: 12px; right: 12px;
+      z-index: 900;
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 8px;
+      padding: 6px 12px;
+      display: flex; align-items: center; gap: 6px;
+    }
+    .search-box input {
+      background: none; border: none; outline: none;
+      color: #e6edf3; font-size: 12px; width: 180px;
+    }
+    .search-box input::placeholder { color: #484f58; }
+
+    /* Custom popup */
+    .leaflet-popup-content-wrapper {
+      background: #161b22 !important;
+      border: 1px solid #30363d !important;
+      border-radius: 8px !important;
+      color: #e6edf3 !important;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.5) !important;
+    }
+    .leaflet-popup-tip { background: #161b22 !important; }
+    .popup-title { font-size: 13px; font-weight: 700; margin-bottom: 8px;
+                   border-bottom: 1px solid #30363d; padding-bottom: 6px; }
+    .popup-row { display: flex; justify-content: space-between;
+                 font-size: 11px; margin-bottom: 3px; }
+    .popup-label { color: #8b949e; }
+    .popup-value { color: #e6edf3; font-weight: 500; text-align: right;
+                   max-width: 55%; }
+    .badge {
+      display: inline-block; padding: 1px 6px; border-radius: 10px;
+      font-size: 10px; font-weight: 700;
+    }
+    .badge-critical { background: #3d1111; color: #ff7b72; border: 1px solid #d73027; }
+    .badge-high     { background: #3d2111; color: #ffa657; border: 1px solid #f46d43; }
+    .badge-moderate { background: #3d3111; color: #e3b341; border: 1px solid #fdae61; }
+    .badge-low      { background: #112d1f; color: #3fb950; border: 1px solid #238636; }
+    .badge-ej       { background: #1d1140; color: #bc8cff; border: 1px solid #8957e5; }
+
+    /* Gradient bar for risk */
+    .risk-gradient {
+      height: 8px; border-radius: 4px; margin: 4px 0;
+      background: linear-gradient(90deg,
+        #edf8fb, #66c2a4, #41ae76, #fec44f, #fe9929, #ec7014, #cc4c02, #8c2d04);
+    }
+
+    .scrollable { overflow-y: auto; max-height: 300px; }
+
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #30363d; border-radius: 2px; }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      .sidebar { width: 260px; }
+      .stat-pill { display: none; }
+    }
+  </style>
+</head>
+
+<body>
+  <!-- ── Header ── -->
+  <header>
+    <div class="logo">☢</div>
+    <div>
+      <h1>Ghost Infrastructure — Underground Storage Tank Contamination Risk</h1>
+      <p>Harris County, Texas &nbsp;·&nbsp; Modelled from TCEQ LUST Registry, SSURGO Soils, USGS Groundwater Flow</p>
+    </div>
+    <div class="stats" id="header-stats">
+      <div class="stat-pill">LUST Sites: <span id="stat-lust">—</span></div>
+      <div class="stat-pill">Wells Assessed: <span id="stat-wells">—</span></div>
+      <div class="stat-pill">High/Critical: <span id="stat-high">—</span></div>
+      <div class="stat-pill">EJ Communities: <span id="stat-ej">—</span></div>
+    </div>
+  </header>
+
+  <div class="main">
+    <!-- ── Sidebar ── -->
+    <div class="sidebar">
+
+      <!-- Layers -->
+      <div class="sidebar-section">
+        <h3>Layers</h3>
+        <div class="layer-toggle">
+          <input type="checkbox" id="lyr-risk-zone" checked />
+          <label for="lyr-risk-zone">
+            <span class="dot" style="background:rgba(204,76,2,0.6);border:1px solid #8c2d04"></span>
+            Contamination Risk Zones
+          </label>
+        </div>
+        <div class="layer-toggle">
+          <input type="checkbox" id="lyr-lust" checked />
+          <label for="lyr-lust">
+            <span class="dot" style="background:#d73027"></span>
+            LUST Sites
+          </label>
+        </div>
+        <div class="layer-toggle">
+          <input type="checkbox" id="lyr-wells" checked />
+          <label for="lyr-wells">
+            <span class="dot" style="background:#58a6ff;border:1px solid #1f6feb"></span>
+            Drinking-Water Wells
+          </label>
+        </div>
+        <div class="layer-toggle">
+          <input type="checkbox" id="lyr-ej" />
+          <label for="lyr-ej">
+            <span class="dot" style="background:#8957e5"></span>
+            EJ-Flagged Wells
+          </label>
+        </div>
+        <div class="layer-toggle">
+          <input type="checkbox" id="lyr-cluster" checked />
+          <label for="lyr-cluster">Cluster LUST markers</label>
+        </div>
+      </div>
+
+      <!-- Well Vulnerability Summary -->
+      <div class="sidebar-section">
+        <h3>Well Vulnerability</h3>
+        <div class="vuln-bar" id="vuln-bar">
+          <div class="vuln-segment" style="background:#1a9641;width:25%" id="bar-low">Low</div>
+          <div class="vuln-segment" style="background:#fdae61;width:25%" id="bar-mod">Mod</div>
+          <div class="vuln-segment" style="background:#f46d43;width:25%" id="bar-high">High</div>
+          <div class="vuln-segment" style="background:#d73027;width:25%" id="bar-crit">Crit</div>
+        </div>
+        <div id="vuln-legend" style="display:flex;flex-wrap:wrap;gap:6px;font-size:10px;color:#8b949e">
+          <span><span class="dot" style="background:#1a9641;display:inline-block;vertical-align:middle"></span> Low</span>
+          <span><span class="dot" style="background:#fdae61;display:inline-block;vertical-align:middle"></span> Moderate</span>
+          <span><span class="dot" style="background:#f46d43;display:inline-block;vertical-align:middle"></span> High</span>
+          <span><span class="dot" style="background:#d73027;display:inline-block;vertical-align:middle"></span> Critical</span>
+        </div>
+      </div>
+
+      <!-- Risk Zone Legend -->
+      <div class="sidebar-section">
+        <h3>Risk Zone Legend</h3>
+        <div class="legend-item">
+          <div class="legend-color" style="background:rgba(140,45,4,0.55);border:1px solid #8c2d04"></div>
+          <span>High Risk (&gt; 0.60) — 0–500 m</span>
+        </div>
+        <div class="legend-item">
+          <div class="legend-color" style="background:rgba(254,153,41,0.45);border:1px solid #fe9929"></div>
+          <span>Moderate Risk (0.30–0.60) — 500–1,500 m</span>
+        </div>
+        <div class="legend-item">
+          <div class="legend-color" style="background:rgba(237,248,251,0.35);border:1px solid #74c6cf"></div>
+          <span>Low Risk (0.10–0.30) — 1,500–3,000 m</span>
+        </div>
+        <div style="margin-top:8px">
+          <div class="risk-gradient"></div>
+          <div style="display:flex;justify-content:space-between;font-size:9px;color:#484f58;margin-top:2px">
+            <span>Low Risk</span><span>High Risk</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Remediation Priority List -->
+      <div class="sidebar-section">
+        <h3>Top Remediation Priorities</h3>
+        <div class="scrollable" id="priority-list">
+          <p style="color:#484f58;font-size:11px">Loading…</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Map Container ── -->
+    <div style="flex:1;position:relative;display:flex;flex-direction:column;">
+      <div id="map" style="flex:1"></div>
+
+      <!-- Info panel at bottom -->
+      <div id="info-panel">
+        <p style="color:#484f58;font-size:11px">Click any feature to see details.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Scripts ── -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+
+  <script>
+  // ── Map Initialisation ──────────────────────────────────────────────────────
+  const map = L.map('map', {
+    center: [29.8, -95.4],
+    zoom: 10,
+    zoomControl: true,
+  });
+
+  // Basemap options
+  const basemaps = {
+    dark: L.tileLayer(
+      'https://{s}.basemaps.cartocdn.com/dark_matter_nolabels/{z}/{x}/{y}{r}.png',
+      { attribution: '© OpenStreetMap, © CARTO', maxZoom: 19 }
+    ),
+    labels: L.tileLayer(
+      'https://{s}.basemaps.cartocdn.com/dark_matter_only_labels/{z}/{x}/{y}{r}.png',
+      { attribution: '', maxZoom: 19, pane: 'shadowPane' }
+    ),
+    satellite: L.tileLayer(
+      'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+      { attribution: '© Esri', maxZoom: 19 }
+    ),
+  };
+  basemaps.dark.addTo(map);
+  basemaps.labels.addTo(map);
+
+  // ── Colour Helpers ───────────────────────────────────────────────────────────
+  const VULN_COLOR = { Critical:'#d73027', High:'#f46d43', Moderate:'#fdae61', Low:'#1a9641' };
+  const STATUS_COLOR = {
+    'Open-Confirmed Contamination': '#d73027',
+    'Open-Active':                  '#f46d43',
+    'Open-Inactive':                '#fdae61',
+    'Closed-Contamination Remains': '#abd9e9',
+    'Closed-No Further Action':     '#74add1',
+  };
+  const RISK_ZONE_COLOR = { High:'#8c2d04', Moderate:'#fe9929', Low:'#b2e2e2' };
+
+  function riskColor(v) {
+    if (v === undefined || v === null) return '#8b949e';
+    if (v >= 0.75) return '#8c2d04';
+    if (v >= 0.60) return '#cc4c02';
+    if (v >= 0.45) return '#ec7014';
+    if (v >= 0.30) return '#fe9929';
+    if (v >= 0.15) return '#66c2a4';
+    return '#b2e2e2';
+  }
+
+  // ── Layer Groups ─────────────────────────────────────────────────────────────
+  const riskZoneLayer = L.layerGroup().addTo(map);
+  const lustCluster   = L.markerClusterGroup({ maxClusterRadius: 40, disableClusteringAtZoom: 14 });
+  const lustLayer     = L.layerGroup();
+  const wellsLayer    = L.layerGroup().addTo(map);
+  const ejLayer       = L.layerGroup();
+
+  let lustClusterAdded = true;
+  lustCluster.addTo(map);
+
+  // ── Info Panel Helper ─────────────────────────────────────────────────────────
+  function showInfo(title, rows) {
+    const panel = document.getElementById('info-panel');
+    let html = `<h4>${title}</h4><table>`;
+    rows.forEach(([k, v]) => {
+      html += `<tr><td>${k}</td><td>${v ?? '—'}</td></tr>`;
+    });
+    html += '</table>';
+    panel.innerHTML = html;
+  }
+
+  // ── Risk Zone Layer ───────────────────────────────────────────────────────────
+  function addRiskZones(geojson) {
+    L.geoJSON(geojson, {
+      style: f => ({
+        fillColor:   RISK_ZONE_COLOR[f.properties.RISK_CLASS] || '#ccc',
+        fillOpacity: f.properties.RISK_CLASS === 'High' ? 0.40 :
+                     f.properties.RISK_CLASS === 'Moderate' ? 0.28 : 0.18,
+        color:       RISK_ZONE_COLOR[f.properties.RISK_CLASS] || '#ccc',
+        weight:      0.8,
+        opacity:     0.7,
+      }),
+      onEachFeature: (f, layer) => {
+        layer.on('click', () => showInfo(
+          `${f.properties.RISK_CLASS} Risk Zone`,
+          [['Risk Class', f.properties.RISK_CLASS],
+           ['Risk Code',  f.properties.RISK_CODE]]
+        ));
+      },
+    }).addTo(riskZoneLayer);
+  }
+
+  // ── LUST Sites Layer ──────────────────────────────────────────────────────────
+  function makeLustMarker(f) {
+    const p     = f.properties;
+    const color = STATUS_COLOR[p.Status] || STATUS_COLOR[p.STATUS] || '#888';
+    const icon  = L.divIcon({
+      html: `<div style="
+        width:10px;height:10px;border-radius:50%;
+        background:${color};
+        border:1.5px solid rgba(255,255,255,0.5);
+        box-shadow:0 0 4px ${color}99;
+      "></div>`,
+      className: '', iconSize: [10,10], iconAnchor: [5,5],
+    });
+    const m = L.marker([f.geometry.coordinates[1], f.geometry.coordinates[0]], { icon });
+    const score = p.HAZARD_SCORE != null ? (p.HAZARD_SCORE * 100).toFixed(0) : '—';
+    m.on('click', () => {
+      showInfo(p.Facility_Name || p.FACILITY_NAME || 'LUST Site', [
+        ['Site ID',       p.Site_Id || p.SITE_ID],
+        ['Type',          p.Facility_Type || p.FACILITY_TYPE],
+        ['Status',        p.Status || p.STATUS],
+        ['Remediation',   p.Remediation_Status || p.REMEDIATION_STATUS],
+        ['Contaminants',  p.Contaminants || p.CONTAMINANTS],
+        ['Tank Age (yr)', p.Tank_Age_Years || p.TANK_AGE_YEARS],
+        ['Hazard Score',  score + '/100'],
+        ['Coords',        `${p.lat?.toFixed(5)}, ${p.lon?.toFixed(5)}`],
+      ]);
+    });
+    return m;
+  }
+
+  function addLust(geojson) {
+    geojson.features.forEach(f => {
+      if (!f.geometry) return;
+      const m = makeLustMarker(f);
+      lustCluster.addLayer(m);
+      lustLayer.addLayer(makeLustMarker(f));
+    });
+    document.getElementById('stat-lust').textContent = geojson.features.length.toLocaleString();
+  }
+
+  // ── Wells Layer ───────────────────────────────────────────────────────────────
+  function addWells(geojson) {
+    let nHigh = 0, nEJ = 0;
+    geojson.features.forEach(f => {
+      if (!f.geometry) return;
+      const p    = f.properties;
+      const cls  = p.VULN_CLASS || 'Low';
+      const col  = VULN_COLOR[cls] || '#8b949e';
+      const size = { Critical:14, High:11, Moderate:8, Low:6 }[cls] || 7;
+      const vscore = p.VULNERABILITY_SCORE ?? 0;
+
+      if (cls === 'High' || cls === 'Critical') nHigh++;
+      if (p.EJ_FLAG) nEJ++;
+
+      const icon = L.divIcon({
+        html: `<div style="
+          width:${size}px;height:${size}px;border-radius:50%;
+          background:${col};
+          border:1.5px solid rgba(255,255,255,0.7);
+          box-shadow:0 0 6px ${col}88;
+          ${p.EJ_FLAG ? 'outline:2px solid #8957e5;outline-offset:2px;' : ''}
+        "></div>`,
+        className:'', iconSize:[size,size], iconAnchor:[size/2,size/2],
+      });
+
+      const m = L.marker([f.geometry.coordinates[1], f.geometry.coordinates[0]], { icon });
+      m.on('click', () => {
+        const badge = `<span class="badge badge-${cls.toLowerCase()}">${cls}</span>`;
+        const ej = p.EJ_FLAG ? `<span class="badge badge-ej">EJ Community</span>` : '';
+        showInfo(p.PWS_Name || p.PWS_NAME || 'Drinking-Water Well', [
+          ['PWSID',          p.PWSID],
+          ['Type',           p.PWS_Type || p.PWS_TYPE],
+          ['Population',     p.Population_Served?.toLocaleString()],
+          ['Vuln. Score',    `${vscore.toFixed(1)}/100 ${badge} ${ej}`],
+          ['LUST within 3km',p.N_LUST_3KM],
+          ['Contam. Risk',   p.CONTAMINATION_RISK?.toFixed(3)],
+          ['Well Depth (ft)',p.Well_Depth_Ft || p.WELL_DEPTH_FT],
+          ['Median Income',  p.MED_INCOME ? '$'+Math.round(p.MED_INCOME).toLocaleString() : null],
+          ['Poverty Rate',   p.PCT_POVERTY ? (p.PCT_POVERTY*100).toFixed(1)+'%' : null],
+          ['Hot Spot',       p.HOTSPOT],
+        ]);
+      });
+
+      wellsLayer.addLayer(m);
+      if (p.EJ_FLAG) ejLayer.addLayer(m);
+    });
+
+    document.getElementById('stat-wells').textContent = geojson.features.length.toLocaleString();
+    document.getElementById('stat-high').textContent  = nHigh.toLocaleString();
+    document.getElementById('stat-ej').textContent    = nEJ.toLocaleString();
+  }
+
+  // ── Remediation Priority List ─────────────────────────────────────────────────
+  function populatePriorityList(data, lustGeojson) {
+    const el = document.getElementById('priority-list');
+    if (!data || !data.length) { el.innerHTML = '<p style="color:#484f58;font-size:11px">No data.</p>'; return; }
+
+    // Build lookup by site ID for fly-to
+    const siteCoords = {};
+    if (lustGeojson) {
+      lustGeojson.features.forEach(f => {
+        const sid = f.properties.Site_Id || f.properties.SITE_ID;
+        if (sid && f.geometry) {
+          siteCoords[sid] = [f.geometry.coordinates[1], f.geometry.coordinates[0]];
+        }
+      });
+    }
+
+    const maxThreat = Math.max(...data.map(d => d.DOWNSTREAM_THREAT || 0), 1);
+    el.innerHTML = '';
+    data.slice(0, 25).forEach((item, i) => {
+      const rank   = item.PRIORITY_RANK || (i + 1);
+      const threat = item.DOWNSTREAM_THREAT || 0;
+      const pct    = (threat / maxThreat * 100).toFixed(0);
+      const div    = document.createElement('div');
+      div.className = 'priority-item';
+      div.innerHTML = `
+        <div class="rank">#${rank}</div>
+        <div class="name">${item.FACILITY_NAME || item.SITE_ID || 'Unknown'}</div>
+        <div class="detail">
+          ${item.N_WELLS_WITHIN_3KM || 0} wells within 3 km &nbsp;·&nbsp;
+          Threat: ${threat.toFixed(1)}
+        </div>
+        <div class="threat-bar"><div class="threat-fill" style="width:${pct}%"></div></div>
+      `;
+      div.addEventListener('click', () => {
+        const coords = siteCoords[item.SITE_ID];
+        if (coords) map.flyTo(coords, 14, { duration: 1.5 });
+      });
+      el.appendChild(div);
+    });
+  }
+
+  // ── Vulnerability Bar ──────────────────────────────────────────────────────────
+  function updateVulnBar(meta) {
+    const vc   = meta.vuln_counts || {};
+    const total = Object.values(vc).reduce((a,b)=>a+b, 0) || 1;
+    const bars  = { Low:'#bar-low', Moderate:'#bar-mod', High:'#bar-high', Critical:'#bar-crit' };
+    Object.entries(bars).forEach(([cls, id]) => {
+      const el  = document.querySelector(id);
+      const cnt = vc[cls] || 0;
+      const pct = (cnt / total * 100).toFixed(1);
+      if (el) { el.style.width = pct + '%'; el.title = `${cls}: ${cnt} (${pct}%)`; }
+    });
+  }
+
+  // ── Layer Toggle Controls ──────────────────────────────────────────────────────
+  function setupToggles() {
+    document.getElementById('lyr-risk-zone').addEventListener('change', e => {
+      e.target.checked ? riskZoneLayer.addTo(map) : map.removeLayer(riskZoneLayer);
+    });
+    document.getElementById('lyr-lust').addEventListener('change', e => {
+      if (lustClusterAdded) {
+        e.target.checked ? lustCluster.addTo(map) : map.removeLayer(lustCluster);
+      } else {
+        e.target.checked ? lustLayer.addTo(map) : map.removeLayer(lustLayer);
+      }
+    });
+    document.getElementById('lyr-wells').addEventListener('change', e => {
+      e.target.checked ? wellsLayer.addTo(map) : map.removeLayer(wellsLayer);
+    });
+    document.getElementById('lyr-ej').addEventListener('change', e => {
+      e.target.checked ? ejLayer.addTo(map) : map.removeLayer(ejLayer);
+    });
+    document.getElementById('lyr-cluster').addEventListener('change', e => {
+      lustClusterAdded = e.target.checked;
+      if (e.target.checked) {
+        map.removeLayer(lustLayer);
+        lustCluster.addTo(map);
+      } else {
+        map.removeLayer(lustCluster);
+        lustLayer.addTo(map);
+      }
+    });
+  }
+
+  // ── Data Loading ───────────────────────────────────────────────────────────────
+  let lustData = null;
+
+  async function loadJSON(url) {
+    const r = await fetch(url);
+    if (!r.ok) throw new Error(`HTTP ${r.status} for ${url}`);
+    return r.json();
+  }
+
+  async function init() {
+    setupToggles();
+
+    // Try to load real GeoJSON files; show placeholder if missing
+    const BASE = 'data/';
+
+    try {
+      const meta = await loadJSON(BASE + 'metadata.json');
+      updateVulnBar(meta);
+    } catch(e) {
+      console.warn('metadata.json not found; using defaults.');
+    }
+
+    try {
+      const rz = await loadJSON(BASE + 'risk_zones.geojson');
+      addRiskZones(rz);
+    } catch(e) {
+      console.warn('risk_zones.geojson not found.', e.message);
+      addPlaceholderRiskZones();
+    }
+
+    try {
+      lustData = await loadJSON(BASE + 'lust_sites.geojson');
+      addLust(lustData);
+    } catch(e) {
+      console.warn('lust_sites.geojson not found – generating placeholder data.');
+      lustData = generatePlaceholderLust();
+      addLust(lustData);
+    }
+
+    try {
+      const wells = await loadJSON(BASE + 'wells.geojson');
+      addWells(wells);
+    } catch(e) {
+      console.warn('wells.geojson not found – generating placeholder wells.');
+      addWells(generatePlaceholderWells());
+    }
+
+    try {
+      const priority = await loadJSON(BASE + 'remediation_priority.json');
+      populatePriorityList(priority, lustData);
+    } catch(e) {
+      console.warn('remediation_priority.json not found.');
+      populatePriorityList(generatePlaceholderPriority(), lustData);
+    }
+  }
+
+  // ── Placeholder Data (shown before pipeline is run) ───────────────────────────
+
+  function randBetween(a, b) { return a + Math.random() * (b - a); }
+
+  function generatePlaceholderLust() {
+    const statuses = ['Open-Confirmed Contamination','Open-Active','Open-Inactive',
+                      'Closed-Contamination Remains','Closed-No Further Action'];
+    const sProbs   = [0.10, 0.20, 0.15, 0.20, 0.35];
+    function pickStatus() {
+      const r = Math.random();
+      let cum = 0;
+      for (let i=0;i<statuses.length;i++) { cum+=sProbs[i]; if(r<cum) return statuses[i]; }
+      return statuses[4];
+    }
+    const clusters = [
+      [-95.37,29.76,80], [-95.55,29.77,60], [-95.45,29.95,40],
+      [-95.25,29.77,50], [-95.62,29.67,35], [-95.48,29.65,30],
+      [-95.70,29.83,25], [-95.27,29.60,25], [-95.40,29.89,40],
+    ];
+    const features = [];
+    let id = 1;
+    clusters.forEach(([cx,cy,n]) => {
+      for (let i=0;i<n;i++) {
+        const lon = cx + (Math.random()-0.5)*0.16;
+        const lat = cy + (Math.random()-0.5)*0.12;
+        const age = Math.floor(randBetween(5,65));
+        const hz  = +(Math.random()*0.8+0.1).toFixed(3);
+        features.push({
+          type:'Feature',
+          geometry: { type:'Point', coordinates:[lon,lat] },
+          properties: {
+            Site_Id: `TCEQ-${String(id++).padStart(5,'0')}`,
+            Facility_Name: `Facility ${id}`,
+            Facility_Type: 'Service Station',
+            Status: pickStatus(),
+            Remediation_Status: ['Unremediated','Partial','Complete','Monitoring'][Math.floor(Math.random()*4)],
+            Contaminants: 'Petroleum/BTEX',
+            Tank_Age_Years: age,
+            HAZARD_SCORE: hz,
+            lat: +lat.toFixed(6), lon: +lon.toFixed(6),
+          }
+        });
+      }
+    });
+    document.getElementById('stat-lust').textContent = features.length.toLocaleString();
+    return { type:'FeatureCollection', features };
+  }
+
+  function generatePlaceholderWells() {
+    const classes = ['Low','Moderate','High','Critical'];
+    const cProbs  = [0.40, 0.30, 0.20, 0.10];
+    function pickClass() {
+      const r = Math.random(); let cum=0;
+      for (let i=0;i<classes.length;i++){cum+=cProbs[i];if(r<cum)return classes[i];}
+      return classes[0];
+    }
+    const features = [];
+    for (let i=0;i<142;i++) {
+      const lon = randBetween(-95.90,-94.90);
+      const lat = randBetween(29.40,30.20);
+      const cls = pickClass();
+      const vs  = { Low:randBetween(0,25), Moderate:randBetween(25,50),
+                    High:randBetween(50,75), Critical:randBetween(75,100) }[cls];
+      const ej  = Math.random()<0.15 && (cls==='High'||cls==='Critical');
+      features.push({
+        type:'Feature',
+        geometry:{ type:'Point', coordinates:[lon,lat] },
+        properties:{
+          PWS_Name:`Water System ${i+1}`, PWSID:`TX${Math.floor(Math.random()*9e6+1e6)}`,
+          PWS_Type:'Community', Population_Served:Math.floor(randBetween(50,50000)),
+          VULN_CLASS:cls, VULNERABILITY_SCORE:+vs.toFixed(1),
+          N_LUST_3KM:Math.floor(randBetween(0,15)),
+          CONTAMINATION_RISK:+randBetween(0,1).toFixed(3),
+          Well_Depth_Ft:+randBetween(50,500).toFixed(1),
+          EJ_FLAG:ej,
+          MED_INCOME: Math.round(randBetween(28000,120000)/100)*100,
+          PCT_POVERTY: +randBetween(0.04,0.40).toFixed(3),
+          lat:+lat.toFixed(6), lon:+lon.toFixed(6),
+        }
+      });
+    }
+    let nH=0, nE=0;
+    features.forEach(f=>{
+      if(['High','Critical'].includes(f.properties.VULN_CLASS)) nH++;
+      if(f.properties.EJ_FLAG) nE++;
+    });
+    document.getElementById('stat-wells').textContent = features.length.toLocaleString();
+    document.getElementById('stat-high').textContent  = nH;
+    document.getElementById('stat-ej').textContent    = nE;
+    // Update vuln bar
+    const vc={Low:0,Moderate:0,High:0,Critical:0};
+    features.forEach(f=>vc[f.properties.VULN_CLASS]++);
+    updateVulnBar({vuln_counts:vc});
+    return { type:'FeatureCollection', features };
+  }
+
+  function addPlaceholderRiskZones() {
+    // Simple concentric circles around top LUST clusters as placeholder
+    const centres = [
+      {lat:29.76,lon:-95.37,cls:'High'},{lat:29.77,lon:-95.55,cls:'Moderate'},
+      {lat:29.95,lon:-95.45,cls:'Low'},{lat:29.77,lon:-95.25,cls:'High'},
+    ];
+    centres.forEach(c=>{
+      L.circle([c.lat,c.lon],{
+        radius:{ High:800, Moderate:2000, Low:4000 }[c.cls],
+        fillColor:RISK_ZONE_COLOR[c.cls],
+        fillOpacity:c.cls==='High'?0.35:c.cls==='Moderate'?0.25:0.15,
+        color:RISK_ZONE_COLOR[c.cls], weight:0.8, opacity:0.6,
+      }).addTo(riskZoneLayer);
+    });
+  }
+
+  function generatePlaceholderPriority() {
+    const items = [];
+    for (let i=1;i<=25;i++) {
+      items.push({
+        PRIORITY_RANK:i,
+        SITE_ID:`TCEQ-${String(Math.floor(Math.random()*9999)).padStart(5,'0')}`,
+        FACILITY_NAME:`Facility ${i}`,
+        N_WELLS_WITHIN_3KM:Math.floor(randBetween(1,15)),
+        DOWNSTREAM_THREAT:+randBetween(20,200).toFixed(1),
+      });
+    }
+    items.sort((a,b)=>b.DOWNSTREAM_THREAT-a.DOWNSTREAM_THREAT);
+    items.forEach((d,i)=>d.PRIORITY_RANK=i+1);
+    return items;
+  }
+
+  // ── Boot ───────────────────────────────────────────────────────────────────────
+  init().catch(err => console.error('Initialisation error:', err));
+  </script>
+</body>
+</html>
