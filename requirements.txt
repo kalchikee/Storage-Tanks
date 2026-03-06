@@ -1,0 +1,49 @@
+# Ghost Infrastructure – Python dependencies
+# Install with:  pip install -r requirements.txt
+
+# Core geo stack
+geopandas>=0.14.0
+rasterio>=1.3.0
+shapely>=2.0.0
+pyproj>=3.6.0
+Fiona>=1.9.0
+
+# Data processing
+pandas>=2.0.0
+numpy>=1.24.0
+scipy>=1.11.0
+
+# Kriging interpolation
+pykrige>=1.7.0
+
+# Hydrological analysis (pure-Python, no binary required)
+pysheds>=0.3.5
+
+# Raster statistics
+rasterstats>=0.19.0
+
+# Spatial statistics / hot-spot analysis
+esda>=2.5.0
+libpysal>=4.9.0
+mapclassify>=2.6.0
+
+# Web / interactive maps
+folium>=0.15.0
+jinja2>=3.1.2
+
+# Static cartography
+matplotlib>=3.7.0
+seaborn>=0.12.0
+contextily>=1.4.0
+
+# HTTP downloads
+requests>=2.31.0
+tqdm>=4.65.0
+
+# Census demographic data
+census>=0.8.19
+us>=2.0.2
+
+# Optional: faster DEM download (uncomment if desired)
+# py3dep>=0.16.0
+# rioxarray>=0.15.0
