@@ -15,6 +15,19 @@ Steps
 6. Export all outputs to GeoPackages and CSV reports
 """
 
+import os as _os, importlib.util as _iu
+def _fix_proj():
+    _spec = _iu.find_spec('rasterio')
+    if _spec:
+        import pathlib as _pl
+        _proj = _pl.Path(_spec.origin).parent / 'proj_data'
+        if _proj.exists():
+            _os.environ.setdefault('GDAL_DATA', str(_pl.Path(_spec.origin).parent / 'gdal_data'))
+            _os.environ.setdefault('PROJ_DATA', str(_proj))
+            _os.environ.setdefault('PROJ_LIB',  str(_proj))
+            _os.environ.setdefault('PROJ_NETWORK', 'OFF')
+_fix_proj(); del _fix_proj
+
 import sys
 import warnings
 import numpy as np
@@ -113,7 +126,7 @@ def score_wells(wells: gpd.GeoDataFrame,
         depth = pd.to_numeric(wells[depth_col], errors="coerce").fillna(100)
     else:
         depth = pd.Series(np.full(len(wells), 100.0))
-    depth_protect = np.clip(1 - depth.values / 600, 0, 1)   # shallower → more vulnerable
+    depth_protect = np.clip(1 - depth.values / 600, 0, 1)   # shallower -> more vulnerable
 
     # ── Composite score ───────────────────────────────────────────────────────
     vuln = (
@@ -137,7 +150,7 @@ def score_wells(wells: gpd.GeoDataFrame,
     )
 
     wells.to_file(dest, driver="GPKG")
-    print(f"    Scored {len(wells)} wells → {dest.name}")
+    print(f"    Scored {len(wells)} wells -> {dest.name}")
     return wells
 
 
@@ -178,7 +191,7 @@ def validate_model(wells_scored: gpd.GeoDataFrame) -> pd.DataFrame:
     })
     dest = REPORTS_DIR / "model_validation.csv"
     report.to_csv(dest, index=False)
-    print(f"    Validation report → {dest.name}")
+    print(f"    Validation report -> {dest.name}")
     print(f"    Precision={precision:.2f}  Recall={recall:.2f}  F1={f1:.2f}")
     return report
 
@@ -197,11 +210,15 @@ def hotspot_analysis(wells_scored: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
         from esda.getisord import G_Local
 
         w  = KNN.from_dataframe(wells_scored, k=min(8, len(wells_scored) - 1))
-        gl = G_Local(wells_scored.VULNERABILITY_SCORE, w, transform="R")
+        # permutations=0 avoids numba JIT memory error; use z-score significance instead
+        gl = G_Local(wells_scored.VULNERABILITY_SCORE, w, transform="R",
+                     permutations=0, n_jobs=1)
 
         gdf = wells_scored.copy()
         gdf["GI_STAR"]    = gl.Zs
-        gdf["P_VALUE"]    = gl.p_sim
+        # p_sim only exists when permutations > 0; use normal approx otherwise
+        import scipy.stats as _ss
+        gdf["P_VALUE"]    = getattr(gl, "p_sim", None) or (2 * (1 - _ss.norm.cdf(np.abs(gl.Zs))))
         gdf["HOTSPOT"]    = pd.cut(
             gl.Zs,
             bins=[-np.inf, -2.58, -1.96, 1.96, 2.58, np.inf],
@@ -209,7 +226,7 @@ def hotspot_analysis(wells_scored: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
                     "Hot Spot 95%","Hot Spot 99%"],
         )
         gdf.to_file(dest, driver="GPKG")
-        print(f"    Hot-spot analysis complete → {dest.name}")
+        print(f"    Hot-spot analysis complete -> {dest.name}")
         n_hot = int((gl.Zs > 1.96).sum())
         print(f"    {n_hot} significant hot-spot wells (p < 0.05).")
         return gdf
@@ -339,7 +356,7 @@ def remediation_priority(lust: gpd.GeoDataFrame,
     df.index += 1
     df.index.name = "PRIORITY_RANK"
     df.to_csv(dest)
-    print(f"    Remediation priority list saved → {dest.name}")
+    print(f"    Remediation priority list saved -> {dest.name}")
     print(f"    Top 5 sites by downstream threat:")
     print(df.head(5)[["SITE_ID","FACILITY_NAME","N_WELLS_WITHIN_3KM","DOWNSTREAM_THREAT"]].to_string())
     return df
@@ -382,7 +399,7 @@ def save_summary(wells_ej: gpd.GeoDataFrame,
     lines.append("")
 
     dest.write_text("\n".join(lines))
-    print(f"    Summary report → {dest.name}")
+    print(f"    Summary report -> {dest.name}")
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
@@ -399,32 +416,32 @@ if __name__ == "__main__":
         if not p.exists():
             raise FileNotFoundError(f"{p} not found. Run earlier pipeline steps first.")
 
-    print("\n[1] Loading processed datasets…")
+    print("\n[1] Loading processed datasets...")
     lust   = gpd.read_file(PROCESSED_DIR / "lust_sites.gpkg")
     wells  = gpd.read_file(PROCESSED_DIR / "wells.gpkg")
 
     risk_arr, risk_tf = _read_raster(PROCESSED_DIR / "contamination_risk.tif")
     ksat_arr, ksat_tf = _read_raster(PROCESSED_DIR / "ksat_raster.tif")
 
-    print("\n[2] Scoring well vulnerability…")
+    print("\n[2] Scoring well vulnerability...")
     wells_scored = score_wells(wells, lust, risk_arr, risk_tf, ksat_arr, ksat_tf)
 
-    print("\n[3] Validating model against sampling data…")
+    print("\n[3] Validating model against sampling data...")
     validation = validate_model(wells_scored)
 
-    print("\n[4] Hot-spot analysis (Getis-Ord Gi*)…")
+    print("\n[4] Hot-spot analysis (Getis-Ord Gi*)...")
     wells_hot = hotspot_analysis(wells_scored)
 
-    print("\n[5] Environmental Justice analysis…")
+    print("\n[5] Environmental Justice analysis...")
     wells_ej = ej_analysis(wells_hot if "GI_STAR" in wells_hot.columns else wells_scored)
 
-    print("\n[6] LUST remediation priority list…")
+    print("\n[6] LUST remediation priority list...")
     priority = remediation_priority(lust, wells_scored)
 
-    print("\n[7] Saving summary…")
+    print("\n[7] Saving summary...")
     save_summary(wells_ej, priority, validation)
 
     print("\n" + "=" * 62)
     print("  Risk scoring complete.")
-    print("→ Run  scripts/05_static_maps.py  next.")
+    print("-> Run  scripts/05_static_maps.py  next.")
     print("=" * 62)

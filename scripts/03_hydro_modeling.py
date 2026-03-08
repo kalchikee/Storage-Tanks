@@ -6,13 +6,26 @@ Hydrological flow modeling and contaminant-transport probability surfaces.
 
 Pipeline
 --------
-1. Condition DEM: fill pits → fill depressions → resolve flats (pysheds)
+1. Condition DEM: fill pits -> fill depressions -> resolve flats (pysheds)
 2. Derive flow direction & accumulation from the water-table surface
 3. Build a weighted cost surface (Ksat × NLCD imperviousness factor × slope)
 4. Trace contamination risk downstream from every LUST source
 5. Classify plume probability zones (High / Moderate / Low)
 6. Export rasters + GeoPackage polygons for risk zones
 """
+
+import os as _os, importlib.util as _iu
+def _fix_proj():
+    _spec = _iu.find_spec('rasterio')
+    if _spec:
+        import pathlib as _pl
+        _proj = _pl.Path(_spec.origin).parent / 'proj_data'
+        if _proj.exists():
+            _os.environ.setdefault('GDAL_DATA', str(_pl.Path(_spec.origin).parent / 'gdal_data'))
+            _os.environ.setdefault('PROJ_DATA', str(_proj))
+            _os.environ.setdefault('PROJ_LIB',  str(_proj))
+            _os.environ.setdefault('PROJ_NETWORK', 'OFF')
+_fix_proj(); del _fix_proj
 
 import sys
 import warnings
@@ -87,7 +100,7 @@ def condition_dem(wt_path: Path) -> tuple[np.ndarray, dict]:
         conditioned = np.where(np.isnan(filled), 0, filled)
 
     _write(out_path, conditioned.astype(np.float32), meta)
-    print(f"    Saved conditioned water-table → {out_path.name}")
+    print(f"    Saved conditioned water-table -> {out_path.name}")
     return conditioned.astype(np.float32), meta
 
 
@@ -205,7 +218,7 @@ def build_cost_surface(ksat_path: Path, dem_path: Path, nlcd_path: Path) -> Path
     ksat_norm = np.clip(np.log10(ksat + 1e-6) / np.log10(30), 0, 1)
     slope_norm = np.clip(slope_deg / 10, 0, 1)
 
-    # Cost: lower Ksat, steeper slope, more impervious → higher cost
+    # Cost: lower Ksat, steeper slope, more impervious -> higher cost
     cost = (
         0.50 * (1 - ksat_norm)      # soil permeability (primary driver)
         + 0.30 * slope_norm          # slope (steeper = slower lateral transport)
@@ -214,7 +227,7 @@ def build_cost_surface(ksat_path: Path, dem_path: Path, nlcd_path: Path) -> Path
     cost = np.clip(cost, 0.01, 1.0)
 
     _write(dest, cost, meta)
-    print(f"    Saved cost surface → {dest.name}")
+    print(f"    Saved cost surface -> {dest.name}")
     return dest
 
 
@@ -261,7 +274,7 @@ def propagate_contamination(lust_gdf: gpd.GeoDataFrame,
     # Convolve source raster with anisotropic distance decay
     # We iterate three times at different scales to simulate near/mid/far risk
     result = np.zeros_like(risk)
-    for sigma in [5, 15, 40]:         # pixels → ~150 m, 450 m, 1200 m at 30m res
+    for sigma in [5, 15, 40]:         # pixels -> ~150 m, 450 m, 1200 m at 30m res
         blurred = gaussian_filter(risk * (inv_cost ** 0.5), sigma=sigma)
         decay   = np.exp(-sigma / 25)
         result += blurred * decay
@@ -275,7 +288,7 @@ def propagate_contamination(lust_gdf: gpd.GeoDataFrame,
         result /= result.max()
 
     _write(dest, result, meta)
-    print(f"    Saved contamination risk raster → {dest.name}")
+    print(f"    Saved contamination risk raster -> {dest.name}")
     return result
 
 
@@ -322,7 +335,7 @@ def classify_risk_zones(risk: np.ndarray, meta: dict) -> gpd.GeoDataFrame:
 
     gdf = gpd.GeoDataFrame(records, crs=crs).dissolve(by="RISK_CLASS").reset_index()
     gdf.to_file(dest_v, driver="GPKG")
-    print(f"    Saved {len(gdf)} risk zone classes → {dest_v.name}")
+    print(f"    Saved {len(gdf)} risk zone classes -> {dest_v.name}")
     return gdf
 
 
@@ -342,22 +355,22 @@ if __name__ == "__main__":
         if not p.exists():
             raise FileNotFoundError(f"{p} not found. Run 02_preprocessing.py first.")
 
-    print("\n[1] Conditioning water-table surface…")
+    print("\n[1] Conditioning water-table surface...")
     wt_cond, meta = condition_dem(wt_path)
 
-    print("\n[2] Computing flow direction and accumulation…")
+    print("\n[2] Computing flow direction and accumulation...")
     fdir, facc = compute_flow(wt_cond, meta)
 
-    print("\n[3] Building cost surface…")
+    print("\n[3] Building cost surface...")
     cost_path = build_cost_surface(ksat_path, dem_path, nlcd_path)
 
-    print("\n[4] Loading LUST sites…")
+    print("\n[4] Loading LUST sites...")
     lust_gdf = gpd.read_file(PROCESSED_DIR / "lust_sites.gpkg")
 
-    print("\n[5] Propagating contamination risk…")
+    print("\n[5] Propagating contamination risk...")
     risk = propagate_contamination(lust_gdf, cost_path, facc, meta)
 
-    print("\n[6] Classifying plume probability zones…")
+    print("\n[6] Classifying plume probability zones...")
     risk_zones = classify_risk_zones(risk, meta)
 
     summary = risk_zones.groupby("RISK_CLASS")["geometry"].count()
@@ -365,5 +378,5 @@ if __name__ == "__main__":
 
     print("\n" + "=" * 62)
     print("  Hydrological modeling complete.")
-    print("→ Run  scripts/04_risk_scoring.py  next.")
+    print("-> Run  scripts/04_risk_scoring.py  next.")
     print("=" * 62)

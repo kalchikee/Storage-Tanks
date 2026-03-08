@@ -22,6 +22,19 @@ Map 5 – Remediation Priority Map
 All maps saved as high-resolution PNG to output/maps/.
 """
 
+import os as _os, importlib.util as _iu
+def _fix_proj():
+    _spec = _iu.find_spec('rasterio')
+    if _spec:
+        import pathlib as _pl
+        _proj = _pl.Path(_spec.origin).parent / 'proj_data'
+        if _proj.exists():
+            _os.environ.setdefault('GDAL_DATA', str(_pl.Path(_spec.origin).parent / 'gdal_data'))
+            _os.environ.setdefault('PROJ_DATA', str(_proj))
+            _os.environ.setdefault('PROJ_LIB',  str(_proj))
+            _os.environ.setdefault('PROJ_NETWORK', 'OFF')
+_fix_proj(); del _fix_proj
+
 import sys
 import warnings
 import numpy as np
@@ -343,7 +356,7 @@ if __name__ == "__main__":
         if not p.exists():
             raise FileNotFoundError(f"{p} not found. Run earlier pipeline steps first.")
 
-    print("\n  Loading datasets…")
+    print("\n  Loading datasets...")
     boundary   = gpd.read_file(PROCESSED_DIR / "harris_county_boundary.gpkg")
     lust       = gpd.read_file(PROCESSED_DIR / "lust_sites.gpkg")
     wells      = gpd.read_file(PROCESSED_DIR / "wells_ej.gpkg")
@@ -352,22 +365,22 @@ if __name__ == "__main__":
                  else gpd.GeoDataFrame(columns=["geometry","RISK_CLASS"], crs=CRS_UTM)
     priority   = pd.read_csv(REPORTS_DIR / "remediation_priority.csv")
 
-    print("\n[1] LUST overview map…")
+    print("\n[1] LUST overview map...")
     map_lust_overview(lust, boundary)
 
-    print("[2] Contamination risk surface map…")
+    print("[2] Contamination risk surface map...")
     map_risk_surface(lust, risk_zones, boundary, risk_tif)
 
-    print("[3] Well vulnerability map…")
+    print("[3] Well vulnerability map...")
     map_well_vulnerability(wells, lust, boundary)
 
-    print("[4] Environmental justice map…")
+    print("[4] Environmental justice map...")
     map_ej(wells, boundary)
 
-    print("[5] Remediation priority map…")
+    print("[5] Remediation priority map...")
     map_remediation_priority(lust, priority, boundary)
 
     print("\n" + "=" * 62)
     print(f"  All maps saved to {MAPS_DIR}")
-    print("→ Run  scripts/06_web_map.py  next.")
+    print("-> Run  scripts/06_web_map.py  next.")
     print("=" * 62)

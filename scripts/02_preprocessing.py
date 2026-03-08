@@ -6,6 +6,19 @@ Load, clean, project, and harmonise all raw datasets into analysis-ready
 GeoPackage files and rasters.  All outputs land in data/processed/.
 """
 
+import os as _os, importlib.util as _iu
+def _fix_proj():
+    _spec = _iu.find_spec('rasterio')
+    if _spec:
+        import pathlib as _pl
+        _proj = _pl.Path(_spec.origin).parent / 'proj_data'
+        if _proj.exists():
+            _os.environ.setdefault('GDAL_DATA', str(_pl.Path(_spec.origin).parent / 'gdal_data'))
+            _os.environ.setdefault('PROJ_DATA', str(_proj))
+            _os.environ.setdefault('PROJ_LIB',  str(_proj))
+            _os.environ.setdefault('PROJ_NETWORK', 'OFF')
+_fix_proj(); del _fix_proj
+
 import io
 import sys
 import warnings
@@ -35,7 +48,7 @@ def get_boundary() -> gpd.GeoDataFrame:
     if dest.exists():
         return gpd.read_file(dest)
 
-    print("  Fetching Harris County boundary from Census TIGER…")
+    print("  Fetching Harris County boundary from Census TIGER...")
     url = ("https://www2.census.gov/geo/tiger/TIGER2023/COUNTY/"
            "tl_2023_48_county.zip")
     try:
@@ -43,7 +56,7 @@ def get_boundary() -> gpd.GeoDataFrame:
         gdf = gpd.read_file(zipfile.ZipFile(io.BytesIO(r.content)))
         harris = gdf[gdf.COUNTYFP == "201"].to_crs(CRS_UTM)
         harris.to_file(dest, driver="GPKG")
-        print(f"    Saved boundary → {dest.name}")
+        print(f"    Saved boundary -> {dest.name}")
         return harris
     except Exception as e:
         print(f"    [!] Census TIGER failed ({e}); using bounding-box proxy.")
@@ -116,7 +129,7 @@ def preprocess_lust() -> gpd.GeoDataFrame:
     ).round(4)
 
     gdf.to_file(dest, driver="GPKG")
-    print(f"    Saved {len(gdf)} LUST sites → {dest.name}")
+    print(f"    Saved {len(gdf)} LUST sites -> {dest.name}")
     return gdf
 
 
@@ -147,7 +160,7 @@ def preprocess_brownfields() -> gpd.GeoDataFrame | None:
     ).to_crs(CRS_UTM)
     gdf["SOURCE"] = "EPA_Brownfields"
     gdf.to_file(dest, driver="GPKG")
-    print(f"    Saved {len(gdf)} brownfield sites → {dest.name}")
+    print(f"    Saved {len(gdf)} brownfield sites -> {dest.name}")
     return gdf
 
 
@@ -176,11 +189,11 @@ def preprocess_wells() -> gpd.GeoDataFrame:
         crs=CRS_WGS84,
     ).to_crs(CRS_UTM)
     gdf.to_file(dest, driver="GPKG")
-    print(f"    Saved {len(gdf)} drinking-water wells → {dest.name}")
+    print(f"    Saved {len(gdf)} drinking-water wells -> {dest.name}")
     return gdf
 
 
-# ── Groundwater Monitoring Sites → Depth-to-Water Surface ─────────────────────
+# ── Groundwater Monitoring Sites -> Depth-to-Water Surface ─────────────────────
 
 def preprocess_groundwater() -> gpd.GeoDataFrame:
     dest = PROCESSED_DIR / "groundwater_sites.gpkg"
@@ -217,12 +230,12 @@ def preprocess_groundwater() -> gpd.GeoDataFrame:
         crs=CRS_WGS84,
     ).to_crs(CRS_UTM)
     gdf.to_file(dest, driver="GPKG")
-    print(f"    Saved {len(gdf)} groundwater monitoring sites → {dest.name}")
+    print(f"    Saved {len(gdf)} groundwater monitoring sites -> {dest.name}")
     return gdf
 
 
 def create_gw_depth_raster(dem_path: Path, gw_sites: gpd.GeoDataFrame) -> Path:
-    """Kriging interpolation of depth-to-water table → GeoTIFF."""
+    """Kriging interpolation of depth-to-water table -> GeoTIFF."""
     dest = PROCESSED_DIR / "groundwater_depth_m.tif"
     if dest.exists():
         print("  [OK] groundwater_depth_m.tif already present.")
@@ -254,7 +267,7 @@ def create_gw_depth_raster(dem_path: Path, gw_sites: gpd.GeoDataFrame) -> Path:
     meta.update(dtype="float32", count=1, compress="lzw", nodata=-9999)
     with rasterio.open(dest, "w", **meta) as ds:
         ds.write(full.astype(np.float32), 1)
-    print(f"    Saved kriged groundwater-depth raster → {dest.name}")
+    print(f"    Saved kriged groundwater-depth raster -> {dest.name}")
     return dest
 
 
@@ -281,7 +294,7 @@ def create_simple_gw_depth_raster(dem_path: Path) -> Path:
     meta.update(dtype="float32", count=1, compress="lzw", nodata=-9999)
     with rasterio.open(dest, "w", **meta) as ds:
         ds.write(depth, 1)
-    print(f"    Saved synthetic groundwater-depth raster → {dest.name}")
+    print(f"    Saved synthetic groundwater-depth raster -> {dest.name}")
     return dest
 
 
@@ -316,7 +329,7 @@ def create_ksat_raster(dem_path: Path) -> Path:
     meta.update(dtype="float32", count=1, compress="lzw", nodata=-9999)
     with rasterio.open(dest, "w", **meta) as ds:
         ds.write(ksat, 1)
-    print(f"    Saved Ksat raster → {dest.name}")
+    print(f"    Saved Ksat raster -> {dest.name}")
     return dest
 
 
@@ -339,7 +352,7 @@ def create_water_table(dem_path: Path, gw_depth_path: Path) -> Path:
     meta.update(dtype="float32", nodata=-9999)
     with rasterio.open(dest, "w", **meta) as ds:
         ds.write(wt, 1)
-    print(f"    Saved water-table surface → {dest.name}")
+    print(f"    Saved water-table surface -> {dest.name}")
     return dest
 
 
@@ -354,35 +367,35 @@ if __name__ == "__main__":
     if not dem_path.exists():
         raise FileNotFoundError("DEM not found. Run 01_data_acquisition.py first.")
 
-    print("\n[1] Harris County boundary…")
+    print("\n[1] Harris County boundary...")
     boundary = get_boundary()
 
-    print("\n[2] LUST sites…")
+    print("\n[2] LUST sites...")
     lust = preprocess_lust()
 
-    print("\n[3] EPA Brownfields…")
+    print("\n[3] EPA Brownfields...")
     bf = preprocess_brownfields()
 
-    print("\n[4] Drinking-water wells…")
+    print("\n[4] Drinking-water wells...")
     wells = preprocess_wells()
 
-    print("\n[5] Groundwater monitoring sites…")
+    print("\n[5] Groundwater monitoring sites...")
     gw_sites = preprocess_groundwater()
 
-    print("\n[6] Ksat raster…")
+    print("\n[6] Ksat raster...")
     ksat_path = create_ksat_raster(dem_path)
 
-    print("\n[7] Groundwater-depth surface (kriging)…")
+    print("\n[7] Groundwater-depth surface (kriging)...")
     if len(gw_sites) >= 4:
         gw_depth_path = create_gw_depth_raster(dem_path, gw_sites)
     else:
         print("    Insufficient sites for kriging – using elevation-based model.")
         gw_depth_path = create_simple_gw_depth_raster(dem_path)
 
-    print("\n[8] Water-table surface…")
+    print("\n[8] Water-table surface...")
     wt_path = create_water_table(dem_path, gw_depth_path)
 
     print("\n" + "=" * 62)
     print("  Preprocessing complete.")
-    print("→ Run  scripts/03_hydro_modeling.py  next.")
+    print("-> Run  scripts/03_hydro_modeling.py  next.")
     print("=" * 62)

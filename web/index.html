@@ -14,6 +14,8 @@
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
 
+    html, body { height: 100%; }
+
     body {
       font-family: 'Segoe UI', system-ui, sans-serif;
       background: #0d1117;
@@ -62,7 +64,7 @@
     .stat-pill span { color: #58a6ff; font-weight: 700; }
 
     /* ── Main Layout ── */
-    .main { display: flex; flex: 1; overflow: hidden; }
+    .main { display: flex; flex: 1; overflow: hidden; min-height: 0; }
 
     /* ── Sidebar ── */
     .sidebar {
@@ -156,7 +158,7 @@
     #info-panel td:last-child { color: #e6edf3; font-weight: 500; }
 
     /* ── Map ── */
-    #map { flex: 1; }
+    #map { flex: 1; min-height: 0; }
 
     /* Search */
     .search-box {
@@ -328,8 +330,8 @@
     </div>
 
     <!-- ── Map Container ── -->
-    <div style="flex:1;position:relative;display:flex;flex-direction:column;">
-      <div id="map" style="flex:1"></div>
+    <div style="flex:1;min-height:0;position:relative;display:flex;flex-direction:column;overflow:hidden;">
+      <div id="map" style="flex:1;min-height:0;"></div>
 
       <!-- Info panel at bottom -->
       <div id="info-panel">

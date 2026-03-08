@@ -14,6 +14,19 @@ web/data/remediation_priority.json   – top 50 ranked LUST sites
 web/index.html                       – regenerated with embedded metadata
 """
 
+import os as _os, importlib.util as _iu
+def _fix_proj():
+    _spec = _iu.find_spec('rasterio')
+    if _spec:
+        import pathlib as _pl
+        _proj = _pl.Path(_spec.origin).parent / 'proj_data'
+        if _proj.exists():
+            _os.environ.setdefault('GDAL_DATA', str(_pl.Path(_spec.origin).parent / 'gdal_data'))
+            _os.environ.setdefault('PROJ_DATA', str(_proj))
+            _os.environ.setdefault('PROJ_LIB',  str(_proj))
+            _os.environ.setdefault('PROJ_NETWORK', 'OFF')
+_fix_proj(); del _fix_proj
+
 import sys
 import json
 import warnings
@@ -52,6 +65,8 @@ def export_geojson(gdf: gpd.GeoDataFrame,
                    prop_cols: list[str],
                    target_crs: str = "EPSG:4326"):
     """Reproject to WGS-84 and write a minimal GeoJSON."""
+    if gdf.crs is None:
+        gdf = gdf.set_crs(CRS_UTM)   # assume UTM 14N if CRS missing
     gdf2 = gdf.to_crs(target_crs).copy()
     features = []
     for _, row in gdf2.iterrows():
@@ -66,7 +81,7 @@ def export_geojson(gdf: gpd.GeoDataFrame,
         })
     fc = {"type": "FeatureCollection", "features": features}
     dest.write_text(json.dumps(fc, separators=(",", ":")))
-    print(f"    Exported {len(features)} features → {dest.name}")
+    print(f"    Exported {len(features)} features -> {dest.name}")
 
 
 # ── 1  LUST Sites ─────────────────────────────────────────────────────────────
@@ -122,7 +137,7 @@ def export_priority(priority_df: pd.DataFrame):
                 r[k] = None
     (WEB_DATA / "remediation_priority.json").write_text(
         json.dumps(records, separators=(",", ":")))
-    print(f"    Exported top {len(records)} priority sites → remediation_priority.json")
+    print(f"    Exported top {len(records)} priority sites -> remediation_priority.json")
 
 
 # ── 5  Metadata sidebar JSON ──────────────────────────────────────────────────
@@ -142,7 +157,7 @@ def export_metadata(lust: gpd.GeoDataFrame, wells: gpd.GeoDataFrame):
         "generated":     pd.Timestamp.now().strftime("%Y-%m-%d"),
     }
     (WEB_DATA / "metadata.json").write_text(json.dumps(meta, indent=2))
-    print(f"    Metadata → metadata.json")
+    print(f"    Metadata -> metadata.json")
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
@@ -176,20 +191,20 @@ if __name__ == "__main__":
     if priority_path.exists():
         priority = pd.read_csv(priority_path)
 
-    print("\n[1] Exporting LUST sites…")
+    print("\n[1] Exporting LUST sites...")
     export_lust(lust)
 
-    print("[2] Exporting wells…")
+    print("[2] Exporting wells...")
     export_wells(wells)
 
-    print("[3] Exporting risk zones…")
+    print("[3] Exporting risk zones...")
     export_risk_zones(zones)
 
     if priority is not None:
-        print("[4] Exporting remediation priority list…")
+        print("[4] Exporting remediation priority list...")
         export_priority(priority)
 
-    print("[5] Writing metadata…")
+    print("[5] Writing metadata...")
     export_metadata(lust, wells)
 
     print("\n" + "=" * 62)

@@ -9,6 +9,19 @@ Real data sources are attempted first; synthetic fallbacks are generated
 automatically so the pipeline can run end-to-end without manual intervention.
 """
 
+import os as _os, importlib.util as _iu
+def _fix_proj():
+    _spec = _iu.find_spec('rasterio')
+    if _spec:
+        import pathlib as _pl
+        _proj = _pl.Path(_spec.origin).parent / 'proj_data'
+        if _proj.exists():
+            _os.environ.setdefault('GDAL_DATA', str(_pl.Path(_spec.origin).parent / 'gdal_data'))
+            _os.environ.setdefault('PROJ_DATA', str(_proj))
+            _os.environ.setdefault('PROJ_LIB',  str(_proj))
+            _os.environ.setdefault('PROJ_NETWORK', 'OFF')
+_fix_proj(); del _fix_proj
+
 import io
 import sys
 import json
@@ -65,7 +78,7 @@ def download_tceq_lust() -> bool:
         print("  [OK] TCEQ LUST data already present.")
         return True
 
-    print("  Attempting TCEQ PST database download…")
+    print("  Attempting TCEQ PST database download...")
     # The TCEQ provides a downloadable Access/CSV export of their PST DB.
     # URL may change; check https://www.tceq.texas.gov/remediation/pst/pst_reports.html
     zip_dest = RAW_DIR / "lust" / "pstdb.zip"
@@ -82,7 +95,7 @@ def download_tceq_lust() -> bool:
         except Exception as e:
             print(f"    [!] Extraction failed: {e}")
 
-    print("  Generating synthetic TCEQ LUST data for Harris County…")
+    print("  Generating synthetic TCEQ LUST data for Harris County...")
     _synthetic_lust(dest)
     return False
 
@@ -103,6 +116,10 @@ def _synthetic_lust(dest: Path):
     for clon, clat, cnt in clusters:
         lons.extend(rng.normal(clon, 0.08, cnt))
         lats.extend(rng.normal(clat, 0.06, cnt))
+    # Add scatter to reach n if clusters fall short
+    while len(lons) < n:
+        lons.append(rng.uniform(minlon, maxlon))
+        lats.append(rng.uniform(minlat, maxlat))
     lons = np.clip(lons, minlon, maxlon)[:n]
     lats = np.clip(lats, minlat, maxlat)[:n]
 
@@ -137,7 +154,7 @@ def _synthetic_lust(dest: Path):
         "GALLONS_RELEASED":   np.round(rng.lognormal(3, 2, n), 0),
     })
     df.to_csv(dest, index=False)
-    print(f"    Generated {n} synthetic LUST sites → {dest.name}")
+    print(f"    Generated {n} synthetic LUST sites -> {dest.name}")
 
 
 # ── 2  EPA Brownfields ────────────────────────────────────────────────────────
@@ -148,7 +165,7 @@ def download_epa_brownfields() -> bool:
         print("  [OK] EPA Brownfields data already present.")
         return True
 
-    print("  Fetching EPA Brownfields via ECHO API…")
+    print("  Fetching EPA Brownfields via ECHO API...")
     minlon, minlat, maxlon, maxlat = BBOX
     try:
         params = {
@@ -167,7 +184,7 @@ def download_epa_brownfields() -> bool:
     except Exception as e:
         print(f"    [!] ECHO API failed: {e}")
 
-    print("  Generating synthetic EPA Brownfields…")
+    print("  Generating synthetic EPA Brownfields...")
     _synthetic_brownfields(dest)
     return False
 
@@ -196,7 +213,7 @@ def _synthetic_brownfields(dest: Path):
         "CONTAMINANTS":rng.choice(["VOCs","Metals","PCBs","Petroleum","Mixed"], n),
         "AREA_ACRES":  np.round(rng.lognormal(1, 1, n), 2),
     }).to_csv(dest, index=False)
-    print(f"    Generated {n} synthetic brownfield sites → {dest.name}")
+    print(f"    Generated {n} synthetic brownfield sites -> {dest.name}")
 
 
 # ── 3  EPA SDWIS Drinking Water Wells ─────────────────────────────────────────
@@ -207,7 +224,7 @@ def download_sdwis_wells() -> bool:
         print("  [OK] SDWIS well data already present.")
         return True
 
-    print("  Fetching EPA SDWIS well data…")
+    print("  Fetching EPA SDWIS well data...")
     try:
         url = "https://data.epa.gov/efservice/SDW_PWSID_COORD/PRIMACY_AGENCY_CODE/TX/CSV"
         r = requests.get(url, timeout=60)
@@ -226,7 +243,7 @@ def download_sdwis_wells() -> bool:
     except Exception as e:
         print(f"    [!] SDWIS API failed: {e}")
 
-    print("  Generating synthetic SDWIS well data…")
+    print("  Generating synthetic SDWIS well data...")
     _synthetic_wells(dest)
     return False
 
@@ -247,7 +264,7 @@ def _synthetic_wells(dest: Path):
         "WELL_DEPTH_FT":    np.round(rng.uniform(50, 500, n), 1),
         "INSTALL_YEAR":     rng.integers(1940, 2020, n),
     }).to_csv(dest, index=False)
-    print(f"    Generated {n} synthetic drinking-water wells → {dest.name}")
+    print(f"    Generated {n} synthetic drinking-water wells -> {dest.name}")
 
 
 # ── 4  USGS Groundwater Levels ────────────────────────────────────────────────
@@ -258,7 +275,7 @@ def download_usgs_groundwater() -> bool:
         print("  [OK] USGS groundwater data already present.")
         return True
 
-    print("  Fetching USGS groundwater levels from NWIS…")
+    print("  Fetching USGS groundwater levels from NWIS...")
     try:
         r = requests.get(
             "https://waterservices.usgs.gov/nwis/gwlevels/",
@@ -277,7 +294,7 @@ def download_usgs_groundwater() -> bool:
     except Exception as e:
         print(f"    [!] USGS NWIS failed: {e}")
 
-    print("  Generating synthetic USGS groundwater data…")
+    print("  Generating synthetic USGS groundwater data...")
     _synthetic_groundwater(dest)
     return False
 
@@ -307,7 +324,7 @@ def _synthetic_groundwater(dest: Path):
                 "MEASUREMENT_DT": d.strftime("%Y-%m-%d"),
             })
     pd.DataFrame(rows).to_csv(dest, index=False)
-    print(f"    Generated {len(rows)} synthetic groundwater measurements → {dest.name}")
+    print(f"    Generated {len(rows)} synthetic groundwater measurements -> {dest.name}")
 
 
 # ── 5  NLCD 2021 Land Cover ───────────────────────────────────────────────────
@@ -318,7 +335,7 @@ def download_nlcd() -> bool:
         print("  [OK] NLCD raster already present.")
         return True
     print("  NOTE: NLCD requires a manual download from https://www.mrlc.gov/")
-    print("  Generating synthetic NLCD land-cover raster for Harris County…")
+    print("  Generating synthetic NLCD land-cover raster for Harris County...")
     _synthetic_nlcd(dest)
     return False
 
@@ -349,7 +366,7 @@ def _synthetic_nlcd(dest: Path):
                        count=1, dtype="uint8", crs="EPSG:32614",
                        transform=tf, compress="lzw") as ds:
         ds.write(data, 1)
-    print(f"    Generated synthetic NLCD raster ({w}×{h} px) → {dest.name}")
+    print(f"    Generated synthetic NLCD raster ({w}×{h} px) -> {dest.name}")
 
 
 # ── 6  SSURGO Soil Hydraulic Conductivity ─────────────────────────────────────
@@ -360,7 +377,7 @@ def download_ssurgo() -> bool:
         print("  [OK] SSURGO data already present.")
         return True
 
-    print("  Fetching SSURGO via Soil Data Access API…")
+    print("  Fetching SSURGO via Soil Data Access API...")
     query = """
         SELECT mu.mukey, mu.muname, c.compname, c.comppct_r,
                ch.hzdept_r, ch.hzdepb_r, ch.ksat_r,
@@ -390,7 +407,7 @@ def download_ssurgo() -> bool:
     except Exception as e:
         print(f"    [!] Soil Data Access failed: {e}")
 
-    print("  Generating synthetic SSURGO soil data…")
+    print("  Generating synthetic SSURGO soil data...")
     _synthetic_ssurgo(dest)
     return False
 
@@ -423,7 +440,7 @@ def _synthetic_ssurgo(dest: Path):
             "dbthirdbar_r": rng.uniform(1.1, 1.7),
         })
     pd.DataFrame(rows).to_csv(dest, index=False)
-    print(f"    Generated {n} synthetic soil map units → {dest.name}")
+    print(f"    Generated {n} synthetic soil map units -> {dest.name}")
 
 
 # ── 7  3DEP Digital Elevation Model ──────────────────────────────────────────
@@ -434,7 +451,7 @@ def download_dem() -> bool:
         print("  [OK] DEM already present.")
         return True
 
-    print("  Attempting 3DEP DEM download via py3dep…")
+    print("  Attempting 3DEP DEM download via py3dep...")
     try:
         import py3dep
         minlon, minlat, maxlon, maxlat = BBOX
@@ -442,12 +459,12 @@ def download_dem() -> bool:
                              resolution=30, crs="EPSG:4326")
         import rioxarray  # noqa
         dem.rio.to_raster(str(dest))
-        print(f"    Downloaded 3DEP DEM → {dest.name}")
+        print(f"    Downloaded 3DEP DEM -> {dest.name}")
         return True
     except Exception as e:
         print(f"    [!] py3dep failed: {e}")
 
-    print("  Generating synthetic DEM for Harris County…")
+    print("  Generating synthetic DEM for Harris County...")
     _synthetic_dem(dest)
     return False
 
@@ -471,7 +488,7 @@ def _synthetic_dem(dest: Path):
     yy = np.linspace(0, 1, h)
     X, Y = np.meshgrid(xx, yy)
 
-    # Harris County: mostly flat coastal plain, gentle NW→SE slope, 0–50 m
+    # Harris County: mostly flat coastal plain, gentle NW->SE slope, 0–50 m
     base = 45 * (0.55 * (1 - X) + 0.45 * (1 - Y))
 
     # Carve bayou channels (Buffalo Bayou, Brays, White Oak, Greens, Sims)
@@ -494,7 +511,7 @@ def _synthetic_dem(dest: Path):
                        count=1, dtype="float32", crs="EPSG:32614",
                        transform=tf, compress="lzw", nodata=-9999) as ds:
         ds.write(elev, 1)
-    print(f"    Generated synthetic DEM ({w}×{h} px, 30 m) → {dest.name}")
+    print(f"    Generated synthetic DEM ({w}×{h} px, 30 m) -> {dest.name}")
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
@@ -516,7 +533,7 @@ if __name__ == "__main__":
     ]
     results = {}
     for i, (label, fn) in enumerate(steps, 1):
-        print(f"\n[{i}/{len(steps)}] {label}…")
+        print(f"\n[{i}/{len(steps)}] {label}...")
         results[label] = fn()
 
     print("\n" + "=" * 62)
@@ -525,4 +542,4 @@ if __name__ == "__main__":
     for label, real in results.items():
         tag = "Real data" if real else "Synthetic data"
         print(f"  {tag:<15} {label}")
-    print("\n→ Run  scripts/02_preprocessing.py  next.")
+    print("\n-> Run  scripts/02_preprocessing.py  next.")
