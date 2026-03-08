@@ -92,12 +92,14 @@ def export_lust(lust: gpd.GeoDataFrame):
                         "Gallons_Released","HAZARD_SCORE","STATUS_RISK",
                         "AGE_RISK","REMED_RISK"]
             if c in lust.columns]
-    # Add lat/lon for popup convenience
+    # Add lat/lon for popup convenience and ensure SITE_ID is string
     lust2 = lust.to_crs("EPSG:4326").copy()
     lust2["lat"] = lust2.geometry.y.round(6)
     lust2["lon"] = lust2.geometry.x.round(6)
+    if "Site_Id" in lust2.columns:
+        lust2["Site_Id"] = lust2["Site_Id"].astype(str)
     cols += ["lat","lon"]
-    export_geojson(lust, WEB_DATA / "lust_sites.geojson", cols)
+    export_geojson(lust2, WEB_DATA / "lust_sites.geojson", cols)
 
 
 # ── 2  Wells ──────────────────────────────────────────────────────────────────
@@ -130,11 +132,27 @@ def export_risk_zones(zones: gpd.GeoDataFrame):
 # ── 4  Remediation Priority JSON ─────────────────────────────────────────────
 
 def export_priority(priority_df: pd.DataFrame):
+    from pyproj import Transformer
+    to_wgs84 = Transformer.from_crs(CRS_UTM, "EPSG:4326", always_xy=True)
+
     records = priority_df.head(50).reset_index().to_dict(orient="records")
     for r in records:
         for k, v in list(r.items()):
             if isinstance(v, float) and np.isnan(v):
                 r[k] = None
+        # Convert UTM LONGITUDE/LATITUDE to WGS84 for map fly-to
+        lon_utm = r.get("LONGITUDE")
+        lat_utm = r.get("LATITUDE")
+        if lon_utm is not None and lat_utm is not None:
+            try:
+                wgs_lon, wgs_lat = to_wgs84.transform(float(lon_utm), float(lat_utm))
+                r["LNG"] = round(wgs_lon, 6)
+                r["LAT"] = round(wgs_lat, 6)
+            except Exception:
+                pass
+        # Ensure SITE_ID is a string for consistent JS lookup
+        if "SITE_ID" in r:
+            r["SITE_ID"] = str(r["SITE_ID"])
     (WEB_DATA / "remediation_priority.json").write_text(
         json.dumps(records, separators=(",", ":")))
     print(f"    Exported top {len(records)} priority sites -> remediation_priority.json")

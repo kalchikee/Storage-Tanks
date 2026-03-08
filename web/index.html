@@ -121,13 +121,12 @@
 
     /* Vuln bar */
     .vuln-stacked {
-      height: 22px; border-radius: 5px;
+      height: 14px; border-radius: 5px;
       overflow: hidden; display: flex;
       margin-bottom: 10px;
       background: #1e293b;
     }
     .vs { display: flex; align-items: center; justify-content: center;
-          font-size: 9px; font-weight: 700; color: rgba(255,255,255,0.9);
           transition: width 0.4s ease; overflow: hidden; }
 
     .vuln-pills { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -317,15 +316,15 @@
     .popup-key { font-size: 10.5px; color: #64748b; white-space: nowrap; }
     .popup-val { font-size: 10.5px; color: #e2e8f0; font-weight: 500; }
     .popup-score-bar {
-      margin-top: 12px; padding-top: 10px;
+      margin-top: 10px; padding-top: 8px;
       border-top: 1px solid rgba(255,255,255,0.07);
     }
     .popup-score-label {
-      font-size: 10px; color: #64748b; margin-bottom: 5px;
-      display: flex; justify-content: space-between;
+      font-size: 10.5px; color: #64748b; margin-bottom: 4px;
+      display: flex; justify-content: space-between; align-items: center;
     }
     .popup-score-track {
-      height: 5px; background: #1e293b; border-radius: 3px;
+      height: 6px; background: #1e293b; border-radius: 3px;
       overflow: hidden;
     }
     .popup-score-fill { height: 100%; border-radius: 3px; }
@@ -434,10 +433,10 @@
       <div class="section">
         <div class="section-title">Well Vulnerability</div>
         <div class="vuln-stacked" id="vuln-bar">
-          <div class="vs" id="bar-low"    style="background:#22c55e;width:25%">Low</div>
-          <div class="vs" id="bar-mod"    style="background:#f59e0b;width:25%">Mod</div>
-          <div class="vs" id="bar-high"   style="background:#f97316;width:25%">High</div>
-          <div class="vs" id="bar-crit"   style="background:#ef4444;width:25%">Crit</div>
+          <div class="vs" id="bar-low"    style="background:#22c55e;width:25%"></div>
+          <div class="vs" id="bar-mod"    style="background:#f59e0b;width:25%"></div>
+          <div class="vs" id="bar-high"   style="background:#f97316;width:25%"></div>
+          <div class="vs" id="bar-crit"   style="background:#ef4444;width:25%"></div>
         </div>
         <div class="vuln-pills" id="vuln-pills">
           <div class="vuln-pill"><span class="dot" style="background:#22c55e"></span>Low <span id="n-low">—</span></div>
@@ -873,7 +872,7 @@
     const siteCoords = {};
     if (lustGJ) {
       lustGJ.features.forEach(f => {
-        const sid = String(f.properties.Site_Id || f.properties.SITE_ID || '');
+        const sid = String(f.properties.Site_Id ?? f.properties.SITE_ID ?? '');
         if (sid && f.geometry)
           siteCoords[sid] = [f.geometry.coordinates[1], f.geometry.coordinates[0]];
       });
@@ -895,8 +894,13 @@
         <div class="threat-bar"><div class="threat-fill" style="width:${pct}%"></div></div>
       `;
       div.addEventListener('click', () => {
-        const coords = siteCoords[String(item.SITE_ID)];
-        if (coords) map.flyTo(coords, 15, { duration: 1.5 });
+        // Use pre-converted WGS84 coords from JSON if available
+        if (item.LAT && item.LNG) {
+          map.flyTo([item.LAT, item.LNG], 15, { duration: 1.5 });
+        } else {
+          const coords = siteCoords[String(item.SITE_ID)];
+          if (coords) map.flyTo(coords, 15, { duration: 1.5 });
+        }
       });
       el.appendChild(div);
     });
