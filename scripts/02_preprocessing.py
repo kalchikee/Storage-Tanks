@@ -253,6 +253,12 @@ def create_gw_depth_raster(dem_path: Path, gw_sites: gpd.GeoDataFrame) -> Path:
     y_pts = np.array([g.y for g in gw_sites.geometry])
     z_pts = gw_sites["DEPTH_M"].values
 
+    # Subsample to at most 300 points for memory efficiency
+    if len(x_pts) > 300:
+        rng_sub = np.random.default_rng(7)
+        idx = rng_sub.choice(len(x_pts), 300, replace=False)
+        x_pts, y_pts, z_pts = x_pts[idx], y_pts[idx], z_pts[idx]
+
     # Kriging on a coarser grid for speed, then zoom to full resolution
     nx, ny = w // 10, h // 10
     xg = np.linspace(bounds.left,   bounds.right, nx)

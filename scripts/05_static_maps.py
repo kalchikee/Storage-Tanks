@@ -289,18 +289,27 @@ def map_remediation_priority(lust: gpd.GeoDataFrame,
                              priority_df: pd.DataFrame,
                              boundary: gpd.GeoDataFrame):
     top = priority_df.head(50)
-    site_ids = top.reset_index().SITE_ID.values
-    top_lust = lust[lust.get("Site_Id", lust.get("SITE_ID", pd.Series(dtype=str)))
-                       .isin(site_ids)].copy()
+    top_reset = top.reset_index().copy()
+    # Coerce SITE_ID to string on both sides to avoid int64/object merge error
+    top_reset["SITE_ID"] = top_reset["SITE_ID"].astype(str)
+    site_ids = top_reset.SITE_ID.values
+
+    # Find the SITE_ID column in lust (may be Site_Id or SITE_ID)
+    lust_id_col = next(
+        (c for c in lust.columns if c.upper() == "SITE_ID"), lust.columns[0]
+    )
+    lust_id_str = lust[lust_id_col].astype(str)
+    top_lust = lust[lust_id_str.isin(site_ids)].copy()
     if len(top_lust) == 0:
         top_lust = lust.head(50).copy()
 
+    top_lust = top_lust.copy()
+    top_lust["_SITE_ID_STR"] = top_lust[lust_id_col].astype(str)
     top_lust = top_lust.merge(
-        top.reset_index()[["SITE_ID","PRIORITY_RANK","DOWNSTREAM_THREAT"]],
-        left_on=top_lust.columns[top_lust.columns.str.upper() == "SITE_ID"][0]
-                 if any(top_lust.columns.str.upper() == "SITE_ID") else top_lust.columns[0],
+        top_reset[["SITE_ID","PRIORITY_RANK","DOWNSTREAM_THREAT"]],
+        left_on="_SITE_ID_STR",
         right_on="SITE_ID", how="left",
-    )
+    ).drop(columns=["_SITE_ID_STR"])
 
     fig, ax = plt.subplots(figsize=(13, 10))
     boundary.plot(ax=ax, facecolor="#f0f0f0", edgecolor="#888", linewidth=1)
@@ -320,6 +329,8 @@ def map_remediation_priority(lust: gpd.GeoDataFrame,
     # Annotate top 10
     for i, row in top_lust.head(10).iterrows():
         rank = row.get("PRIORITY_RANK", i+1)
+        if pd.isna(rank):
+            rank = i + 1
         ax.annotate(f"#{int(rank)}", (row.geometry.x, row.geometry.y),
                     fontsize=7, fontweight="bold", color="#222",
                     xytext=(4, 4), textcoords="offset points")

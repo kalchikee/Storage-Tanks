@@ -1,12 +1,12 @@
 {
   "study_area": "Harris County, Texas",
-  "lust_count": 523,
+  "lust_count": 4294,
   "well_count": 142,
   "vuln_counts": {
     "Low": 131,
     "Moderate": 9,
     "High": 2
   },
-  "ej_flagged": 0,
+  "ej_flagged": 1,
   "generated": "2026-03-08"
 }
